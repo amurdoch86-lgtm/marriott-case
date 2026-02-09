@@ -1,0 +1,131 @@
+---
+title: "Marriott"
+author: "Aaron Murdoch, Brandon Bath, & Tyler O'Keefe"
+format: pdf
+editor: visual
+---
+
+Import Packages
+
+```{r}
+library(tsibble)
+library(tidyverse)
+library(fable)
+library(feasts)
+library(lubridate)
+library(readxl)
+library(lmtest)
+```
+
+Import Data Set
+
+```{r}
+df<- read_excel("cleaneddata.xlsx")
+
+str(df)
+```
+
+Build a tsibble (convert date to date type, make it a tsibble to use forecasting model tools -instead of a tibble) (got rid of the dow indicator variable, don't need it?(not seasonal?)
+
+```{r}
+df_ts <- df %>% 
+  mutate(date=as_date(date)) %>% 
+  select(-dow_indicator) %>% 
+  as_tsibble(index=date)
+  
+str(df_ts)
+df_ts
+summary(df_ts)
+```
+
+Time Series Plot (doesn't seem to have a trend or seasonality)
+
+```{r}
+df_ts %>%
+  ggplot(aes(x=date, y=pickup_ratio))+
+  geom_line() +
+  labs(title="Pickup Ratio vs Time", x= "Time", y="Pickup Ratio")+
+  theme_grey()
+```
+
+Autocorrelation
+
+```{r}
+df_ts %>%
+  ACF(pickup_ratio, lag_max = 36)%>%
+  print()
+  autoplot()
+
+```
+
+Partition Data (use full weeks for training)
+
+```{r}
+train <- df_ts %>%
+  slice(1:70)
+valid <- df_ts %>%
+  slice(71:87)
+test <- df_ts %>%
+  slice(88:n())
+```
+
+Modeling on Pickup Ratios
+
+```{r}
+ratio_models <- train %>%
+  model(
+    BaselineModel = RW(pickup_ratio),
+    SeasonalNaive = SNAIVE(pickup_ratio~lag("week")),
+    ExpSmoothing = ETS(pickup_ratio),
+    RegTime = TSLM(pickup_ratio~trend()),
+    RegDow = TSLM(pickup_ratio~dow)
+  )
+
+augment(ratio_models)
+```
+
+Look at the regression equation
+
+```{r}
+ratio_models %>% select(RegDow) %>% tidy()
+```
+
+Validate: Forecast pickup ratio on validation set
+
+```{r}
+ratio_fc_valid <- ratio_models %>%
+  forecast(new_data = valid)
+```
+
+Convert Pickup Ratio Forecasts into demand forecasts
+
+```{r}
+demand_fc_valid <- ratio_fc_valid %>% 
+  mutate(demand_hat=.mean*tuesday_bookings)
+```
+
+Performance Measures
+
+```{r}
+accuracy(demand_fc_valid, valid)
+```
+
+on both sets (use best model, don't use his example!)
+
+```{r}
+train_valid <- df_ts %>%
+  slice(1:87)
+
+final_models <- train_valid %>%
+  model(BaselineModel=RW(pickup_ratio))
+```
+
+Forecast on Test
+
+```{r}
+ratio_fc_test <- final_models %>%
+  forecast(new_data = test)
+
+forecasted_demand <- ratio_fc_test %>%
+  mutate(demandhat = .mean*tuesday_bookings)
+```
