@@ -11,3 +11,75 @@ Encoding: UTF-8
 
 RnwWeave: Sweave
 LaTeX: pdfLaTeX
+
+
+Load Packages
+
+{r}
+
+library(tidyverse)
+library(tsibble)
+library(fable)
+library(feasts)
+library(lubridate)
+library(readxl)
+
+Load the dataset
+
+{r}
+cleaneddata <- read_excel("~/Forecasting & Predictive Analytics/Case Study/cleaneddata.xlsx")
+
+Convert the date column to Date objects
+
+{r}
+hotel_data <- read_excel("~/Forecasting & Predictive Analytics/Case Study/cleaneddata.xlsx")
+print(class(hotel_data))
+print(colnames(hotel_data))
+hotel_data$date <- as.Date(hotel_data$date)
+
+Create the Exploratory Time-Series Plot
+
+{r}
+library(ggplot2)
+ggplot(hotel_data, aes(x = date, y = demand)) +
+  geom_line(color = "blue") +
+  geom_point() +
+  labs(title = "Time-Series of Room Demand", 
+       x = "Date", y = "Demand") +
+  theme_minimal()
+
+Identify Seasonal Patters (Day of the Week)
+
+Set the levels to match the Marriott forecasting week
+
+{r}
+hotel_data$dow <- factor(hotel_data$dow, 
+                         levels = c("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"))
+
+ggplot(hotel_data, aes(x = dow, y = demand, fill = dow)) +
+  geom_boxplot() +
+  labs(title = "Demand Patterns by Day of Week", 
+       x = "Day of Week", y = "Demand") +
+  theme_light()
+
+Identifying Historical Outliers
+
+{r}
+library(dplyr)
+
+Calculate the typical demand for each day of the week
+
+{r}
+outlier_analysis <- hotel_data %>%
+  group_by(dow) %>%
+  mutate(
+    avg_demand = mean(demand, na.rm = TRUE),
+    sd_demand = sd(demand, na.rm = TRUE),
+    z_score = (demand - avg_demand) / sd_demand
+  ) %>%
+  filter(abs(z_score) > 2) #Flagging significant outliers
+
+View the Outliers
+
+{r}
+print(outlier_analysis[, c("week", "dow", "date", "demand", "z_score")])
