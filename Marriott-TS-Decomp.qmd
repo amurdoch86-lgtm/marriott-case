@@ -1,0 +1,110 @@
+---
+title: "Marriott TS Decomp"
+author: "Aaron Murdoch"
+format: html
+editor: visual
+---
+
+```{r}
+library(tsibble)
+library(tidyverse)
+library(readxl)
+library(fable)
+library(feasts)
+library(slider)
+library(lubridate)
+```
+
+Read Data:
+
+```{r}
+df <- read_xlsx("cleaneddata.xlsx")
+
+```
+
+Convert to tsibble
+
+```{r}
+df_ts <- df %>% 
+  mutate(date=as_date(date)) %>% 
+  select(-dow_indicator) %>% 
+  as_tsibble(index=date)
+  
+str(df_ts)
+df_ts
+summary(df_ts)
+```
+
+Moving Averages
+
+```{r}
+df_ts <- df_ts %>% 
+  mutate(PURMA7=slide_dbl(pickup_ratio, mean, .before=3, .after=3, .complete = TRUE),
+        PURCMA7=((PURMA7+lag(PURMA7))/2))
+```
+
+Trend Estimation Using Regression
+
+```{r}
+fit_trend <- df_ts %>% model(trend=TSLM(PURCMA7~trend()))
+trend_vals <- fitted(fit_trend)
+
+df_ts <- df_ts %>%
+  left_join(trend_vals, by="date") %>%
+  rename(PURCMAT=.fitted)
+```
+
+Calculate CF and SF
+
+```{r}
+df_ts <- df_ts %>%
+  mutate(CF=PURCMA7/PURCMAT,
+         SF=pickup_ratio/PURCMA7)
+```
+
+Calculate SI
+
+```{r}
+df_ts <- df_ts %>%
+  group_by(dow) %>%
+  mutate(SI=mean(SF, na.rm=TRUE)) %>% 
+  ungroup()
+```
+
+Classical Decomposition
+
+```{r}
+dcmp <- df_ts %>% model(classical=classical_decomposition(pickup_ratio, type="multiplicative")) %>% components()
+
+autoplot(dcmp)
+```
+
+Calculate the Fitted Values
+
+```{r}
+df_ts <- df_ts %>%
+  mutate(fitted=PURCMAT*CF*SI) %>%
+  relocate(fitted, .after = pickup_ratio)
+```
+
+Accuracy Measures
+
+```{r}
+df_ts %>%
+  as_tibble() %>%
+  filter(!is.na(pickup_ratio), !is.na(fitted)) %>%
+  summarise(
+    MAPE=mean(abs((pickup_ratio-fitted)/pickup_ratio))*100
+    
+  )
+
+```
+
+```{r}
+fcast1 <- stlf(ts(df_ts$fitted, frequency = 7),
+              s.window = "periodic",
+              t.window = 7,
+              robust = TRUE,
+              method="naive")
+print(fcast1$fitted)
+```
