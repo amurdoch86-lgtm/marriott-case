@@ -14,7 +14,6 @@ library(fable)
 library(feasts)
 library(lubridate)
 library(readxl)
-library(lmtest)
 ```
 
 Import Data Set
@@ -25,7 +24,7 @@ df<- read_excel("cleaneddata.xlsx")
 str(df)
 ```
 
-Build a tsibble (convert date to date type, make it a tsibble to use forecasting model tools -instead of a tibble) (got rid of the dow indicator variable, don't need it?(not seasonal?)
+Build a tsibble (convert date to date type, make it a tsibble to use forecasting model tools -instead of a tibble) (got rid of the dow indicator variable, don't need it?
 
 ```{r}
 df_ts <- df %>% 
@@ -38,7 +37,7 @@ df_ts
 summary(df_ts)
 ```
 
-Time Series Plot (doesn't seem to have a trend or seasonality)
+Time Series Plot
 
 ```{r}
 df_ts %>%
@@ -53,7 +52,6 @@ Autocorrelation
 ```{r}
 df_ts %>%
   ACF(pickup_ratio, lag_max = 36)%>%
-  print()
   autoplot()
 
 ```
@@ -116,16 +114,18 @@ on both sets (use best model, don't use his example!)
 train_valid <- df_ts %>%
   slice(1:87)
 
-final_models <- train_valid %>%
-  model(BaselineModel=RW(pickup_ratio))
+final_models2 <- train_valid %>%
+  model(RegDow = TSLM(pickup_ratio~dow))
+
+augment(final_models2)
 ```
 
 Forecast on Test
 
 ```{r}
-ratio_fc_test <- final_models %>%
+ratio_fc_test1 <- final_models1 %>%
   forecast(new_data = test)
 
-forecasted_demand <- ratio_fc_test %>%
+forecasted_demand1 <- ratio_fc_test1 %>%
   mutate(demandhat = .mean*tuesday_bookings)
 ```
