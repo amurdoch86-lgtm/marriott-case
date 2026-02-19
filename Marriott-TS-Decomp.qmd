@@ -99,14 +99,3 @@ df_ts %>%
   )
 
 ```
-
-Forecasting the decomposition data to the missing dates
-
-```{r}
-fcast1 <- stlf(ts(df_ts$fitted, frequency = 7),
-              s.window = "periodic",
-              t.window = 7,
-              robust = TRUE,
-              method="naive")
-print(fcast1$fitted)
-```
